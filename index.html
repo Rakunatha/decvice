@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DecVice</title>
+<script src="https://cdn.jsdelivr.net/npm/vis-network@9.1.9/standalone/umd/vis-network.min.js"></script>
+<style>
+:root{--bg:#fff;--sf:#f5f5f7;--card:#f5f5f7;--tx:#1d1d1f;--mu:#6e6e73;--ac:#0071e3;--ok:#248a3d;--wa:#b25000;--er:#d70015;--bd:#d2d2d7;color-scheme:light}
+@media(prefers-color-scheme:dark){:root{--bg:#000;--sf:#1c1c1e;--card:#1c1c1e;--tx:#f5f5f7;--mu:#98989d;--ac:#2997ff;--ok:#30d158;--wa:#ff9f0a;--er:#ff453a;--bd:#38383a;color-scheme:dark}}
+*{box-sizing:border-box}html{-webkit-font-smoothing:antialiased}
+body{margin:0;background:var(--bg);color:var(--tx);font:19px/1.55 -apple-system,BlinkMacSystemFont,"SF Pro Display","Helvetica Neue",Inter,sans-serif;letter-spacing:-.011em;padding-top:env(safe-area-inset-top)}
+.ban{color:var(--wa);text-align:center;font-size:13px;font-weight:500;letter-spacing:.02em;padding:10px;border-bottom:1px solid var(--bd)}
+header{display:flex;flex-wrap:wrap;gap:16px;align-items:center;justify-content:space-between;padding:18px 28px;max-width:1100px;margin:auto}
+header strong{font-size:22px;font-weight:600;letter-spacing:.08em}header label{color:var(--mu);font-size:15px}
+nav{display:flex;flex-wrap:wrap;gap:4px 22px;padding:0 28px 8px;max-width:1100px;margin:auto}
+nav a{color:var(--mu);text-decoration:none;font-size:15px;padding:6px 0;border-bottom:2px solid transparent;transition:color .2s}
+nav a:hover{color:var(--tx)}nav a.on{color:var(--tx);border-color:var(--tx);font-weight:600}nav a.off{display:none}
+main{padding:40px 28px 96px;max-width:1100px;margin:auto}
+h2{font-size:clamp(34px,6vw,56px);font-weight:600;letter-spacing:-.03em;line-height:1.05;margin:0 0 28px}
+h3{font-size:22px;font-weight:600;letter-spacing:-.02em;margin:0 0 8px}
+.card{background:var(--card);border:0;border-radius:22px;padding:28px;margin:0 0 20px}
+button,input,select,textarea{font:inherit;font-size:16px;color:var(--tx);background:var(--bg);border:1px solid var(--bd);border-radius:12px;padding:10px 14px;transition:border-color .2s,opacity .2s}
+textarea{width:100%;min-height:110px;resize:vertical}input:focus,select:focus,textarea:focus{border-color:var(--ac);outline:none}
+button{cursor:pointer;background:var(--ac);color:#fff;border:0;border-radius:980px;padding:10px 22px;font-weight:500}
+button:hover{opacity:.85}button.s{background:transparent;color:var(--ac);border:1px solid var(--ac)}button.d{background:transparent;color:var(--er);border:1px solid var(--er)}
+header button.d{border:0;padding:8px 4px}
+:focus-visible{outline:3px solid var(--ac);outline-offset:3px}
+.g{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px}.g .card{margin:0}.mu{color:var(--mu);font-size:15px}
+.tag{display:inline-block;border-radius:980px;padding:2px 12px;font-size:13px;font-weight:600;background:var(--bg);color:var(--mu);border:1px solid var(--bd)}
+.t-pending{color:var(--wa);box-shadow:inset 0 0 0 1.5px var(--wa)}.t-approved,.t-done{color:var(--ok);border-color:var(--ok)}.t-rejected,.t-failed{color:var(--er);box-shadow:inset 0 0 0 1.5px var(--er)}.t-running{color:var(--ac);border-color:var(--ac)}
+#net{height:400px;border-radius:16px;background:var(--bg)}
+table{width:100%;border-collapse:collapse;font-size:15px}td,th{border-bottom:1px solid var(--bd);padding:10px 8px;text-align:left;word-break:break-word}th{color:var(--mu);font-weight:500}
+.unc{background:rgba(255,159,10,.3);border-radius:4px;padding:0 3px}.log{max-height:120px;overflow:auto;font-size:14px;color:var(--mu)}
+label{color:var(--mu)}
+@media(max-width:600px){body{font-size:17px}main{padding:28px 18px 64px}.card{padding:20px;border-radius:18px}header,nav{padding-left:18px;padding-right:18px}}
+</style></head><body>
+<header><div><strong>DecVice</strong><div class="mu" style="font-size:13px;margin-top:-2px">Integrated Evidence Intelligence System</div></div></header>
+<nav id="nav"></nav><main id="app"></main>
+<script>
+const $=s=>document.querySelector(s);
+const h=(t,a={},...k)=>{const e=document.createElement(t);for(const[x,v]of Object.entries(a)){if(x==='on')for(const[ev,f]of Object.entries(v))e.addEventListener(ev,f);else if(x==='class')e.className=v;else e.setAttribute(x,v)}k.flat().forEach(c=>e.append(c instanceof Node?c:document.createTextNode(String(c??''))));return e};
+const SEED={cases:[],ev:[]};
+let S;try{S=JSON.parse(localStorage.getItem('ieis3'))}catch(e){}
+if(!S)S={cases:SEED.cases,ev:SEED.ev,sug:[],audit:[]};
+const save=()=>{try{localStorage.setItem('ieis3',JSON.stringify(S))}catch(e){}};
+const sha=async t=>[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(t)))].map(b=>b.toString(16).padStart(2,'0')).join('');
+const LOGFIELDS=['i','t','actor','type','detail','prev','hash'];
+let CASE=S.cases[0]?.id,ERR='';
+async function log(type,detail){const p=S.audit.at(-1),r={i:S.audit.length,t:new Date().toISOString(),actor:'Officer',type,detail,prev:p?p.hash:'GENESIS'};r.hash=await sha(LOGFIELDS.slice(0,6).map(k=>r[k]).join('|'));S.audit.push(r);save()}
+const arr=x=>Array.isArray(x)?x:[];
+function localFusion(c,ev){
+ const ents={},pairs={},tl=[];
+ const add=(type,label,id)=>{const k=type+'|'+label.toLowerCase().replace(/[\s-]/g,'');ents[k]=ents[k]||{id:'n'+Object.keys(ents).length,type,label,ev:new Set(),types:new Set()};ents[k].ev.add(id);return ents[k]};
+ ev.forEach(e=>{const t=e.text,f=[];
+  (t.match(/\b\d{5}[- ]?\d{5}\b/g)||[]).forEach(m=>f.push(add('phone',m,e.id)));
+  (t.match(/\b[A-Z]{2}\d{2}[A-Z]{1,2}\d{1,4}\b/g)||[]).forEach(m=>f.push(add('vehicle',m,e.id)));
+  for(const m of t.matchAll(/\b(?:Complainant|Witness|Suspect|Accused|Victim|Mr|Ms|Mrs)\.?\s+((?:[A-Z][a-z]+\s?){1,2})/g))f.push(add('person',m[1].trim(),e.id));
+  for(const m of t.matchAll(/\b(?:near|at|in|to|from|towards)\s+((?:[A-Z][a-z]+\s?){1,3})/g))f.push(add('place',m[1].trim(),e.id));
+  const u=[...new Set(f)].slice(0,8);u.forEach(x=>x.types.add(e.type));
+  for(let i=0;i<u.length;i++)for(let j=i+1;j<u.length;j++){const k=[u[i].id,u[j].id].sort().join('~');const p=pairs[k]=pairs[k]||{a:u[i],b:u[j],ev:new Set(),types:new Set()};p.ev.add(e.id);p.types.add(e.type)}
+  t.split(/(?<=[.!?])\s+/).forEach(sn=>{const m=sn.match(/\b([01]?\d|2[0-3]):([0-5]\d)\b/);const hm=m?m[0].padStart(5,'0'):e.ts.slice(11,16);tl.push({k:e.ts.slice(0,10)+hm,time:(m?'':'~')+hm+' ('+e.type+')',event:sn.slice(0,140),evidence:[e.id]})})});
+ const E=Object.values(ents),conf=(n,ty)=>Math.round(Math.min(.9,.3+.2*(n-1)+(ty>1?.1:0))*100)/100;
+ const links=Object.values(pairs).map(p=>({from:p.a.id,to:p.b.id,label:p.ev.size>1?'together in '+p.ev.size+' items':'mentioned together',confidence:conf(p.ev.size,p.types.size),evidence:[...p.ev]}));
+ const conflicts=[],V=E.filter(x=>x.type==='vehicle');
+ for(let i=0;i<V.length;i++)for(let j=i+1;j<V.length;j++){const a=V[i],b=V[j],A=a.label.toUpperCase(),B=b.label.toUpperCase();
+  if(A.startsWith(B)||B.startsWith(A)){links.push({from:a.id,to:b.id,label:'possible same vehicle (partial plate)',confidence:.6,evidence:[...a.ev,...b.ev]});conflicts.push('Plates '+a.label+' and '+b.label+' may be the same vehicle; confirm the full plate.')}
+  else if(A.slice(0,4)===B.slice(0,4))conflicts.push('Plates '+a.label+' and '+b.label+' differ; verify which is correct.')}
+ ['Witness','CCTV','Call','Forensic'].forEach(t=>{if(!ev.some(e=>e.type===t))conflicts.push('Gap: no '+t+' evidence added yet.')});
+ E.filter(x=>x.ev.size===1&&x.type!=='place').slice(0,4).forEach(x=>conflicts.push('Single-source '+x.type+': '+x.label+' (only in '+[...x.ev][0]+').'));
+ const deg={};links.forEach(l=>{deg[l.from]=(deg[l.from]||0)+1;deg[l.to]=(deg[l.to]||0)+1});
+ const sc=x=>x.ev.size*2+x.types.size+(deg[x.id]||0),R2=[...E].sort((a,b)=>sc(b)-sc(a));
+ const ins=R2.filter(x=>x.ev.size>1).slice(0,5).map(x=>({title:x.label+' ('+x.type+') is corroborated across '+x.ev.size+' items',evidence:[...x.ev],reasoning:['Appears in '+[...x.ev].join(', ')+'.','Sources involved: '+[...x.types].join(', ')+'.','Linked to '+(deg[x.id]||0)+' other entities.'],confidence:conf(x.ev.size,x.types.size),limitations:'Rule-based text matching. The same string in several records does not prove the same real-world person or object.',change:'Evidence of a different identity, an alibi or a data-entry error would weaken this.'}));
+ if(!ins.length)conflicts.push('No entity appears in more than one item yet. Add overlapping evidence to enable correlation.');
+ const leads=R2.slice(0,5).map((x,i)=>({rank:i+1,lead:'Verify '+x.type+' "'+x.label+'"',why:'Appears in '+x.ev.size+' item(s) ('+[...x.types].join(', ')+'), linked to '+(deg[x.id]||0)+' entities.',confidence:conf(x.ev.size,x.types.size)}));
+ return{entities:E.map(x=>({id:x.id,type:x.type,label:x.label})),links,timeline:tl.sort((a,b)=>a.k<b.k?-1:1).map(({k,...r})=>r),conflicts,insights:ins,leads}}
+function localBias(){const T=['caste','dalit','brahmin','hindu','muslim','christian','sikh','religion','female','woman','women','gender','accent','slum','locality'],tx=S.ev.filter(e=>e.c===CASE).map(e=>e.text).join(' ').toLowerCase(),o=JSON.stringify(S.sug.filter(s=>s.c===CASE).map(s=>s.data)).toLowerCase(),iE=T.filter(t=>tx.includes(t)),iO=T.filter(t=>o.includes(t));
+ return{warnings:[...iO.map(t=>'Suggestions mention "'+t+'"; leads must not rely on it.'),...iE.filter(t=>!iO.includes(t)).map(t=>'Evidence mentions "'+t+'"; check it is not used as a reason for suspicion.')],summary:iO.length?'Sensitive attribute referenced in suggestions.':'No sensitive attribute found in suggestions (keyword check only; place names are treated as facts, not grounds for suspicion).',risk:iO.length?'high':iE.length?'medium':'low'}}
+function newCase(){const f={},mk=(k,ph,t='input')=>f[k]=h(t,{placeholder:ph,'aria-label':ph});mk('name','Case title');mk('off','Offence (e.g. theft)');mk('loc','Location (fictional)');mk('sum','Brief summary','textarea');f.date=h('input',{type:'date','aria-label':'Date of offence'});
+ return h('div',{class:'card'},h('h3','1 · Enter case details'),h('div',{class:'g'},f.name,f.off,f.loc,f.date),h('p'),f.sum,h('p'),h('button',{on:{click:async()=>{if(!f.name.value.trim())return f.name.focus();const c={id:'C'+Date.now(),name:f.name.value,off:f.off.value,date:f.date.value,loc:f.loc.value,sum:f.sum.value};S.cases.push(c);CASE=c.id;await log('CASE_CREATED',c.id);location.hash='#evidence';render()}}},'Create case and add evidence'))}
+let CODE='',BUSY='';try{CODE=sessionStorage.getItem('ac')||''}catch(e){}
+async function aiCall(task,payload,retry){
+ const r=await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/json','x-access-code':CODE},body:JSON.stringify({task,payload}),signal:AbortSignal.timeout(60000)}).catch(e=>{throw new Error(e.name==='TimeoutError'?'the request timed out':'could not reach the server')});
+ if(r.status===401&&!retry){CODE=prompt('Access code')||'';try{sessionStorage.setItem('ac',CODE)}catch(e){}return aiCall(task,payload,1)}
+ const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||'server error '+r.status);return j.result}
+function clean(o,ev){if(!o||typeof o!=='object')throw new Error('invalid AI response');
+ const ids=new Set(ev.map(e=>e.id)),str=x=>String(x??'').slice(0,300),ei=a=>arr(a).map(String).filter(x=>ids.has(x)),cf=x=>Math.max(0,Math.min(1,+x||0));
+ const ents=arr(o.entities).filter(e=>e&&e.id!=null&&e.label).map(e=>({id:String(e.id),type:str(e.type),label:str(e.label)})),eid=new Set(ents.map(e=>e.id));
+ return{entities:ents,
+ links:arr(o.links).filter(l=>l&&eid.has(String(l.from))&&eid.has(String(l.to))).map(l=>({from:String(l.from),to:String(l.to),label:str(l.label),confidence:cf(l.confidence),evidence:ei(l.evidence)})).filter(l=>l.evidence.length),
+ timeline:arr(o.timeline).map(t=>({time:str(t.time),event:str(t.event),evidence:ei(t.evidence)})),conflicts:arr(o.conflicts).map(str),
+ insights:arr(o.insights).map(d=>({title:str(d.title),evidence:ei(d.evidence),reasoning:arr(d.reasoning).map(str),confidence:cf(d.confidence),limitations:str(d.limitations),change:str(d.change)})).filter(d=>d.evidence.length),
+ leads:arr(o.leads).map((d,i)=>({rank:+d.rank||i+1,lead:str(d.lead),why:str(d.why),confidence:cf(d.confidence)}))}}
+async function run(){const ev=S.ev.filter(e=>e.c===CASE),cs=S.cases.find(x=>x.id===CASE);if(!ev.length){ERR='Add evidence to this case first.';return render()}
+ BUSY='Analysing the evidence with AI. This can take up to a minute…';render();
+ const items=ev.map(({id,type,src,ts,text})=>({id,type,src,ts,text}));let o,source='ai';
+ try{o=clean(await aiCall('correlate',{case:{name:cs.name,offence:cs.off,date:cs.date,location:cs.loc,summary:cs.sum},evidence:items}),ev);await log('AI_CALL','correlate '+CASE)}
+ catch(e){ERR='AI was not used: '+e.message+'. Showing basic pattern matching instead.';o=localFusion(cs,ev);source='rules';await log('AI_FAILED',e.message)}
+ const t=Date.now();S.sug=S.sug.filter(x=>x.c!==CASE);
+ o.insights.forEach((d,i)=>S.sug.push({id:'i'+t+i,c:CASE,kind:'insight',data:d,status:'pending'}));
+ o.leads.forEach((d,i)=>S.sug.push({id:'l'+t+i,c:CASE,kind:'lead',data:d,status:'pending'}));
+ S['f'+CASE]={entities:o.entities,links:o.links,timeline:o.timeline,conflicts:o.conflicts,source};
+ let b;if(source==='ai'){try{const r=await aiCall('bias',{evidence:items,analysis:o});b={warnings:arr(r.warnings).map(x=>String(x).slice(0,300)),summary:String(r.summary||'').slice(0,400),risk:['low','medium','high'].includes(r.risk)?r.risk:'unknown'};await log('AI_CALL','bias '+CASE)}catch(e){b=localBias()}}else b=localBias();
+ S['b'+CASE]=b;BUSY='';await log('CORRELATE',CASE+' via '+source);save();location.hash='#correlations';render()}
+async function decide(x,st){x.status=st;await log(st.toUpperCase(),x.kind+' '+x.id);render()}
+const badge=s=>h('span',{class:'tag t-'+s},s);
+const caseSel=()=>h('select',{'aria-label':'Case',on:{change:e=>{CASE=e.target.value;render()}}},S.cases.map(c=>{const o=h('option',{value:c.id},c.name);if(c.id===CASE)o.selected=true;return o}));
+const pct=x=>Math.round((+x||0)*100)+'%';
+const decBtns=x=>x.status!=='pending'?'':h('p',{},h('button',{on:{click:()=>decide(x,'approved')}},'Approve'),' ',h('button',{class:'d',on:{click:()=>decide(x,'rejected')}},'Reject'));
+const VIEWS={
+cases(){return h('div',{},h('h2','Cases'),h('p',{class:'mu'},'Enter the case, add evidence, then run correlation. Every output is a suggestion for human review.'),newCase(),
+ h('div',{class:'g'},S.cases.map(c=>h('div',{class:'card'},h('h3',c.name),h('div',{class:'mu'},[c.off,c.loc,c.date].filter(Boolean).join(' · ')),c.sum?h('p',{class:'mu'},c.sum):'','Evidence items: '+S.ev.filter(e=>e.c===c.id).length,h('p'),h('button',{on:{click:()=>{CASE=c.id;location.hash='#evidence'}}},'Open')))),
+ h('p'),h('button',{class:'s',on:{click:()=>{if(confirm('Reset all demo data?')){localStorage.removeItem('ieis3');location.reload()}}}},'Reset demo data'))},
+evidence(){const t=h('select',{'aria-label':'Type'},['FIR','Witness','CCTV','Call','Forensic'].map(x=>h('option',x))),src=h('input',{placeholder:'Source','aria-label':'Source'}),txt=h('textarea',{placeholder:'Evidence text (synthetic only)'}),when=h('input',{type:'datetime-local','aria-label':'Evidence date and time'});
+ return h('div',{},h('h2','Evidence'),caseSel(),h('p'),h('div',{class:'card'},h('h3','Add evidence'),t,' ',src,' ',when,h('p'),txt,h('p'),h('button',{on:{click:async()=>{if(!txt.value.trim())return txt.focus();const ts=when.value||new Date().toISOString().slice(0,16),e={id:'e'+Date.now(),c:CASE,type:t.value,src:src.value||'unknown',ts,text:txt.value};e.hash=await sha([e.type,e.src,e.ts,e.text].join('|'));S.ev.push(e);await log('INGEST',e.type+' '+e.id);render()}}},'Add (SHA-256 recorded)')),
+ h('div',{class:'card',style:'overflow:auto'},h('table',{},h('tr',{},['ID','Type','Source','Time','Hash','Text'].map(x=>h('th',x))),S.ev.filter(e=>e.c===CASE).map(e=>h('tr',{},h('td',e.id),h('td',e.type),h('td',e.src),h('td',e.ts),h('td',e.hash.slice(0,10)+'…'),h('td',e.text))))),
+ h('button',{on:{click:run}},'Run correlation'))},
+correlations(){const f=S['f'+CASE],b=S['b'+CASE],I=S.sug.filter(x=>x.c===CASE&&x.kind==='insight'),L=S.sug.filter(x=>x.c===CASE&&x.kind==='lead').sort((a,c)=>a.data.rank-c.data.rank);
+ setTimeout(()=>{if(f&&window.vis&&$('#net')){const col={person:'#ff9f0a',place:'#30d158',vehicle:'#0a84ff',phone:'#bf5af2'},ids=new Set(f.entities.map(e=>e.id));new vis.Network($('#net'),{nodes:new vis.DataSet(f.entities.map(e=>({id:e.id,label:String(e.label),color:col[e.type]||'#999',font:{color:'#000'}}))),edges:new vis.DataSet(f.links.filter(l=>ids.has(l.from)&&ids.has(l.to)).map(l=>({from:l.from,to:l.to,label:pct(l.confidence),font:{color:'#86868b',size:12},arrows:'to'})))},{physics:{stabilization:true}})}},0);
+ return h('div',{},h('h2','Correlations'),caseSel(),' ',h('button',{on:{click:run}},'Re-run'),h('p'),
+ !f?h('p',{class:'mu'},'No correlations yet. Add evidence and run correlation.'):h('div',{},
+  h('div',{class:'card',style:'box-shadow:inset 0 0 0 1.5px var(--wa)'},(f.source==='ai'?'AI-generated analysis. ':'Basic pattern matching, no AI used. ')+'Suggestions only. A correlation or ranking is not proof and says nothing about guilt.'),
+  h('div',{class:'card'},h('h3','Fairness check · '+b.risk+' risk'),h('p',b.summary),b.warnings.map(w=>h('p',{},'⚠ '+w))),
+  h('div',{class:'card'},h('h3','Evidence graph'),h('div',{id:'net'})),
+  h('div',{class:'card'},h('h3','Timeline'),f.timeline.map(x=>h('div',{},h('b',x.time+' '),x.event,h('span',{class:'mu'},' ['+x.evidence.join(', ')+']')))),
+  h('div',{class:'card'},h('h3','Conflicts and gaps'),f.conflicts.map(c=>h('div',{},'• '+c))),
+  h('h3','Insights'),I.map(x=>{const d=x.data;return h('div',{class:'card'},h('h3',d.title),badge(x.status),h('p',{},'Evidence: '+d.evidence.join(', ')),h('ol',{},d.reasoning.map(r=>h('li',r))),h('p',{},'Confidence '+pct(d.confidence)+'. '+d.limitations),h('p',{class:'mu'},'What would change this? '+d.change),decBtns(x))}),I.length?'':h('p',{class:'mu'},'No entity appears in more than one item yet.'),
+  h('h3','Leads for review'),L.map(x=>h('div',{class:'card'},h('h3','#'+x.data.rank+' '+x.data.lead),badge(x.status),h('p',x.data.why),'Confidence '+pct(x.data.confidence),decBtns(x)))))},
+audit(){const m=h('span');return h('div',{},h('h2','Audit log'),h('div',{class:'card'},h('p',{class:'mu'},'Each entry stores the previous entry’s hash, so tampering can be detected.'),h('button',{on:{click:async()=>{let p='GENESIS';for(const r of S.audit){if(r.prev!==p||r.hash!==await sha(LOGFIELDS.slice(0,6).map(k=>k==='prev'?p:r[k]).join('|'))){m.textContent=' ✖ Tampering detected at entry '+r.i;return}p=r.hash}m.textContent=' ✔ Log intact ('+S.audit.length+' entries)'}}},'Verify integrity'),m),
+ h('div',{class:'card',style:'overflow:auto'},h('table',{},h('tr',{},['#','Time','Type','Detail'].map(x=>h('th',x))),S.audit.map(r=>h('tr',{},h('td',r.i),h('td',r.t),h('td',r.type),h('td',r.detail))))))}};
+function render(){const r=VIEWS[location.hash.slice(1)]?location.hash.slice(1):'cases',N={cases:'Cases',evidence:'Evidence',correlations:'Correlations',audit:'Audit'};
+ if(!S.cases.find(x=>x.id===CASE))CASE=S.cases[0]?.id;const need=['evidence','correlations'].includes(r)&&!CASE,gate=()=>h('div',{},h('h2',N[r]),h('p',{class:'mu'},'Create a case first.'),h('button',{on:{click:()=>{location.hash='#cases'}}},'Go to Cases'));
+ $('#nav').replaceChildren(...Object.keys(N).map(k=>h('a',{href:'#'+k,class:k===r?'on':''},N[k])));
+ const e=ERR;ERR='';$('#app').replaceChildren(BUSY?h('div',{class:'card',role:'status'},BUSY):'',e?h('div',{class:'card',role:'alert',style:'box-shadow:inset 0 0 0 1.5px var(--er)'},e):'',(need?gate:VIEWS[r])())}
+addEventListener('hashchange',render);render();
+</script></body></html>
