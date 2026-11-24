@@ -104,10 +104,23 @@ const badge=s=>h('span',{class:'tag t-'+s},s);
 const caseSel=()=>h('select',{'aria-label':'Case',on:{change:e=>{CASE=e.target.value;render()}}},S.cases.map(c=>{const o=h('option',{value:c.id},c.name);if(c.id===CASE)o.selected=true;return o}));
 const pct=x=>Math.round((+x||0)*100)+'%';
 const decBtns=x=>x.status!=='pending'?'':h('p',{},h('button',{on:{click:()=>decide(x,'approved')}},'Approve'),' ',h('button',{class:'d',on:{click:()=>decide(x,'rejected')}},'Reject'));
+async function loadDemo(){
+ const c={id:'C'+Date.now(),name:'Demo – Market theft (fictional)',off:'Theft',date:'2025-01-10',loc:'Test Bazaar (fictional)',sum:'Dummy case created for demonstration only. All names, places, plates and numbers are made up.'};
+ S.cases.push(c);CASE=c.id;
+ const D=[['FIR','Station A (demo)','2025-01-10T22:30','Complainant Asha Demo reports a theft at Test Bazaar around 21:30. A man in a grey shirt fled on a blue scooter TN00AB0001. Cash and a laptop were taken.'],
+ ['Witness','Witness statement 1','2025-01-11T10:00','Witness Ravi Sample saw a man in a grey shirt leave Test Bazaar on a blue scooter at 21:45, heading towards Dummy Nagar. He noted that the plate began with TN00AB.'],
+ ['CCTV','Camera 7 metadata','2025-01-10T21:52','Camera 7 near Sample Junction shows a blue two-wheeler at 21:52. Plate partly visible as TN00AB00. The rider wears a grey shirt.'],
+ ['Call','Call records (demo)','2025-01-10T22:05','Number 90000-00001 connected to a tower near Test Bazaar between 21:35 and 21:48, then to a tower in Dummy Nagar at 22:05.'],
+ ['Forensic','Lab note (demo)','2025-01-12T15:00','Fingerprints lifted from the shop counter at Test Bazaar are with the lab; no match reported yet. Scooter TN00AB0001 is registered to Mr Kumar Dummy.'],
+ ['Witness','Witness statement 2','2025-01-11T11:30','Witness Meena Test saw a red scooter TN00CD0002 parked near Test Bazaar at 21:20, with a man waiting beside it.']];
+ let n=0;for(const[type,src,ts,text]of D){const e={id:'e'+Date.now()+(n++),c:c.id,type,src,ts,text};e.hash=await sha([e.type,e.src,e.ts,e.text].join('|'));S.ev.push(e)}
+ await log('DEMO_LOADED',c.id+' with '+D.length+' items');save();location.hash='#evidence';render()}
+function resetAll(){try{localStorage.removeItem('ieis3')}catch(e){}S={cases:[],ev:[],sug:[],audit:[]};CASE=undefined;ERR='';BUSY='';save();location.hash='#cases';render()}
+function resetBtn(){const b=h('button',{class:'s'},'Reset demo data');let armed=false;b.addEventListener('click',()=>{if(armed)return resetAll();armed=true;b.textContent='Click again to erase all cases and evidence';b.className='d';setTimeout(()=>{armed=false;b.textContent='Reset demo data';b.className='s'},4000)});return b}
 const VIEWS={
-cases(){return h('div',{},h('h2','Cases'),h('p',{class:'mu'},'Enter the case, add evidence, then run correlation. Every output is a suggestion for human review.'),newCase(),
- h('div',{class:'g'},S.cases.map(c=>h('div',{class:'card'},h('h3',c.name),h('div',{class:'mu'},[c.off,c.loc,c.date].filter(Boolean).join(' · ')),c.sum?h('p',{class:'mu'},c.sum):'','Evidence items: '+S.ev.filter(e=>e.c===c.id).length,h('p'),h('button',{on:{click:()=>{CASE=c.id;location.hash='#evidence'}}},'Open')))),
- h('p'),h('button',{class:'s',on:{click:()=>{if(confirm('Reset all demo data?')){localStorage.removeItem('ieis3');location.reload()}}}},'Reset demo data'))},
+cases(){return h('div',{},h('h2','Cases'),h('p',{class:'mu'},'Enter the case, add evidence, then run correlation. Every output is a suggestion for human review.'),h('button',{class:'s',on:{click:loadDemo}},'Fill with demo case'),h('p'),newCase(),
+ h('div',{class:'g'},S.cases.map(c=>h('div',{class:'card'},h('h3',c.name),h('div',{class:'mu'},[c.off,c.loc,c.date].filter(Boolean).join(' · ')),c.sum?h('p',{class:'mu'},c.sum):'',(()=>{const k={};S.ev.filter(e=>e.c===c.id).forEach(e=>k[e.type]=(k[e.type]||0)+1);const n=Object.values(k).reduce((x,y)=>x+y,0);return 'Evidence items: '+n+(n?' ('+Object.entries(k).map(([t,v])=>t+(v>1?' ×'+v:'')).join(', ')+')':'')})(),h('p'),h('button',{on:{click:()=>{CASE=c.id;location.hash='#evidence'}}},'Open')))),
+ h('p'),resetBtn())},
 evidence(){const t=h('select',{'aria-label':'Type'},['FIR','Witness','CCTV','Call','Forensic'].map(x=>h('option',x))),src=h('input',{placeholder:'Source','aria-label':'Source'}),txt=h('textarea',{placeholder:'Evidence text (synthetic only)'}),when=h('input',{type:'datetime-local','aria-label':'Evidence date and time'});
  return h('div',{},h('h2','Evidence'),caseSel(),h('p'),h('div',{class:'card'},h('h3','Add evidence'),t,' ',src,' ',when,h('p'),txt,h('p'),h('button',{on:{click:async()=>{if(!txt.value.trim())return txt.focus();const ts=when.value||new Date().toISOString().slice(0,16),e={id:'e'+Date.now(),c:CASE,type:t.value,src:src.value||'unknown',ts,text:txt.value};e.hash=await sha([e.type,e.src,e.ts,e.text].join('|'));S.ev.push(e);await log('INGEST',e.type+' '+e.id);render()}}},'Add (SHA-256 recorded)')),
  h('div',{class:'card',style:'overflow:auto'},h('table',{},h('tr',{},['ID','Type','Source','Time','Hash','Text'].map(x=>h('th',x))),S.ev.filter(e=>e.c===CASE).map(e=>h('tr',{},h('td',e.id),h('td',e.type),h('td',e.src),h('td',e.ts),h('td',e.hash.slice(0,10)+'…'),h('td',e.text))))),
